@@ -301,9 +301,10 @@ func addMonitoringPubsubLabelsToJob(data *baseProwJobTemplateData, runID string)
 }
 
 // addVolumeToJob adds the given mount path as volume for the job.
-func addVolumeToJob(data *baseProwJobTemplateData, mountPath, name string, isSecret bool, content []string) {
+func addVolumeToJob(data *baseProwJobTemplateData, mountPath, name string, isSecret bool, isReadOnly bool, content []string) {
 	(*data).VolumeMounts = append((*data).VolumeMounts, []string{"- name: " + name, "  mountPath: " + mountPath}...)
-	if isSecret {
+	// If readOnly: true is not specified, then volume is mounted with ReadWrite access.
+	if isReadOnly {
 		(*data).VolumeMounts = append((*data).VolumeMounts, "  readOnly: true")
 	}
 	s := []string{"- name: " + name}
@@ -327,7 +328,7 @@ func configureServiceAccountForJob(data *baseProwJobTemplateData) {
 		logFatalf("Service account path %q is expected to be \"/etc/<name>/service-account.json\"", data.ServiceAccount)
 	}
 	name := p[2]
-	addVolumeToJob(data, "/etc/"+name, name, true, nil)
+	addVolumeToJob(data, "/etc/"+name, name, true, true, nil)
 }
 
 // addExtraEnvVarsToJob adds extra environment variables to a job.
@@ -342,13 +343,36 @@ func addExtraEnvVarsToJob(envVars []string, data *baseProwJobTemplateData) {
 	}
 }
 
+// addExtraVolumesToJob adds extra volume and volumeMounts to a job.
+func addExtraVolumesToJob(volumes []yaml.MapSlice, data *baseProwJobTemplateData) {
+	for _, volume := range volumes {
+		isSecret := false
+		isReadOnly := false
+		volumeName := ""
+		volumeMountPath := ""
+		for _, item := range volume {
+			switch item.Key {
+			case "name":
+				volumeName = getString(item.Value)
+			case "secret":
+				isSecret = getBool(item.Value)
+			case "path":
+				volumeMountPath = getString(item.Value)
+			}
+		}
+		if len(volumeName) > 0 && len(volumeMountPath) > 0 {
+			addVolumeToJob(data, volumeMountPath, volumeName, isSecret, isReadOnly, nil)
+		}
+	}
+}
+
 // setupDockerInDockerForJob enables docker-in-docker for the given job.
 func setupDockerInDockerForJob(data *baseProwJobTemplateData) {
 	// These volumes are required for running docker command and creating kind clusters.
 	// Reference: https://github.com/kubernetes-sigs/kind/issues/303
-	addVolumeToJob(data, "/docker-graph", "docker-graph", false, []string{"emptyDir: {}"})
-	addVolumeToJob(data, "/lib/modules", "modules", false, []string{"hostPath:", "  path: /lib/modules", "  type: Directory"})
-	addVolumeToJob(data, "/sys/fs/cgroup", "cgroup", false, []string{"hostPath:", "  path: /sys/fs/cgroup", "  type: Directory"})
+	addVolumeToJob(data, "/docker-graph", "docker-graph", false, false, []string{"emptyDir: {}"})
+	addVolumeToJob(data, "/lib/modules", "modules", false, false, []string{"hostPath:", "  path: /lib/modules", "  type: Directory"})
+	addVolumeToJob(data, "/sys/fs/cgroup", "cgroup", false, false, []string{"hostPath:", "  path: /sys/fs/cgroup", "  type: Directory"})
 	data.addEnvToJob("DOCKER_IN_DOCKER_ENABLED", "\"true\"")
 	(*data).SecurityContext = []string{"privileged: true"}
 }
@@ -418,6 +442,8 @@ func parseBasicJobConfigOverrides(data *baseProwJobTemplateData, config yaml.Map
 			setResourcesReqForJob(getMapSlice(item.Value), data)
 		case "reporter_config":
 			setReporterConfigReqForJob(getMapSlice(item.Value), data)
+		case "volumes":
+			addExtraVolumesToJob(getMapSliceArray(item.Value), data)
 		case nil: // already processed
 			continue
 		default:

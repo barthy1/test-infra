@@ -105,6 +105,19 @@ func TestGetStringArray(t *testing.T) {
 	}
 }
 
+func TestGetMapSliceArray(t *testing.T) {
+	SetupForTesting()
+	in := []interface{}{yaml.MapSlice{yaml.MapItem{Key: "abc", Value: 123}},
+		yaml.MapSlice{yaml.MapItem{Key: "def", Value: 456}}}
+	out := getMapSliceArray(in)
+	if logFatalCalls != 0 {
+		t.Fatalf("Input %v should not have caused logFatal call.", in)
+	}
+	if fmt.Sprint(out) != fmt.Sprint(in) {
+		t.Fatalf("Expected input %v and output %v to have identical string output.", in, out)
+	}
+}
+
 func TestGetMapSlice(t *testing.T) {
 	SetupForTesting()
 	var in interface{} = yaml.MapSlice{

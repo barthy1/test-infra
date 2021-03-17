@@ -65,7 +65,7 @@ func generatePresubmit(title string, repoName string, presubmitConfig yaml.MapSl
 			if len(data.Base.Args) == 0 {
 				data.Base.Args = []string{"--" + jobName}
 			}
-			addVolumeToJob(&data.Base, "/etc/repoview-token", "repoview-token", true, nil)
+			addVolumeToJob(&data.Base, "/etc/repoview-token", "repoview-token", true, true, nil)
 		case "go-coverage":
 			if !getBool(item.Value) {
 				return
@@ -74,7 +74,7 @@ func generatePresubmit(title string, repoName string, presubmitConfig yaml.MapSl
 			data.PresubmitJobName = data.Base.RepoNameForJob + "-go-coverage"
 			data.Base.ServiceAccount = ""
 			repoData.EnableGoCoverage = true
-			addVolumeToJob(&data.Base, "/etc/covbot-token", "covbot-token", true, nil)
+			addVolumeToJob(&data.Base, "/etc/covbot-token", "covbot-token", true, true, nil)
 		case "custom-test":
 			data.PresubmitJobName = data.Base.RepoNameForJob + "-" + getString(item.Value)
 		case "go-coverage-threshold":

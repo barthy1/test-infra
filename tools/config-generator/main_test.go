@@ -183,7 +183,8 @@ func TestAddVolumeToJob(t *testing.T) {
 
 	job := baseProwJobTemplateData{}
 	isSecret := false
-	addVolumeToJob(&job, mountPath, name, isSecret, content)
+	isReadOnly := false
+	addVolumeToJob(&job, mountPath, name, isSecret, isReadOnly, content)
 	expectedVolumeMounts := []string{
 		"- name: foo",
 		"  mountPath: somePath",
@@ -204,7 +205,51 @@ func TestAddVolumeToJob(t *testing.T) {
 
 	job = baseProwJobTemplateData{}
 	isSecret = true
-	addVolumeToJob(&job, mountPath, name, isSecret, content)
+	isReadOnly = false
+	addVolumeToJob(&job, mountPath, name, isSecret, isReadOnly, content)
+	expectedVolumeMounts = []string{
+		"- name: foo",
+		"  mountPath: somePath",
+	}
+	if diff := cmp.Diff(job.VolumeMounts, expectedVolumeMounts); diff != "" {
+		t.Fatalf("Unexpected volume mount: (-got +want)\n%s", diff)
+	}
+	expectedVolumes = []string{
+		"- name: foo",
+		"  secret:",
+		"    secretName: foo",
+		"  bar",
+		"  baz",
+	}
+	if diff := cmp.Diff(job.Volumes, expectedVolumes); diff != "" {
+		t.Fatalf("Unexpected volume: (-got +want)\n%s", diff)
+	}
+
+	job = baseProwJobTemplateData{}
+	isSecret = false
+	isReadOnly = true
+	addVolumeToJob(&job, mountPath, name, isSecret, isReadOnly, content)
+	expectedVolumeMounts = []string{
+		"- name: foo",
+		"  mountPath: somePath",
+		"  readOnly: true",
+	}
+	if diff := cmp.Diff(job.VolumeMounts, expectedVolumeMounts); diff != "" {
+		t.Fatalf("Unexpected volume mount: (-got +want)\n%s", diff)
+	}
+	expectedVolumes = []string{
+		"- name: foo",
+		"  bar",
+		"  baz",
+	}
+	if diff := cmp.Diff(job.Volumes, expectedVolumes); diff != "" {
+		t.Fatalf("Unexpected volume: (-got +want)\n%s", diff)
+	}
+
+	job = baseProwJobTemplateData{}
+	isSecret = true
+	isReadOnly = true
+	addVolumeToJob(&job, mountPath, name, isSecret, isReadOnly, content)
 	expectedVolumeMounts = []string{
 		"- name: foo",
 		"  mountPath: somePath",
@@ -285,6 +330,46 @@ func TestAddExtraEnvVarsToJob(t *testing.T) {
 	addExtraEnvVarsToJob(in, &job)
 	if logFatalCalls != 1 {
 		t.Fatalf("Invalid string 'foobar' should have caused error")
+	}
+}
+
+func TestAddExtraVolumesToJob(t *testing.T) {
+	SetupForTesting()
+	job := baseProwJobTemplateData{}
+
+	volume := yaml.MapSlice{
+		yaml.MapItem{Key: "name", Value: "foo"},
+		yaml.MapItem{Key: "path", Value: "/foo/path"},
+		yaml.MapItem{Key: "secret", Value: true},
+	}
+	in := []yaml.MapSlice{volume}
+	addExtraVolumesToJob(in, &job)
+	expectedVolumeMounts := []string{
+		"- name: foo",
+		"  mountPath: /foo/path",
+	}
+	if diff := cmp.Diff(job.VolumeMounts, expectedVolumeMounts); diff != "" {
+		t.Fatalf("Unexpected volume mount: (-got +want)\n%s", diff)
+	}
+
+	expectedVolumes := []string{
+		"- name: foo",
+		"  secret:",
+		"    secretName: foo",
+	}
+	if diff := cmp.Diff(job.Volumes, expectedVolumes); diff != "" {
+		t.Fatalf("Unexpected volume: (-got +want)\n%s", diff)
+	}
+
+	// volume will be added only if name and path are specified
+	incorrectVolume := yaml.MapSlice{
+		yaml.MapItem{Key: "name", Value: "foo"},
+	}
+	in = []yaml.MapSlice{incorrectVolume}
+	addExtraVolumesToJob(in, &job)
+	if diff := cmp.Diff(job.Volumes, expectedVolumes); diff != "" {
+		t.Fatalf("Unexpected new volume was added: (-got +want)\n%s", diff)
+
 	}
 }
 
@@ -378,6 +463,11 @@ func TestParseBasicJobConfigOverrides(t *testing.T) {
 	reporterConfig := yaml.MapSlice{
 		yaml.MapItem{Key: "slack", Value: slack},
 	}
+	volume := yaml.MapSlice{
+		yaml.MapItem{Key: "name", Value: "foo"},
+		yaml.MapItem{Key: "path", Value: "/foo/path"},
+		yaml.MapItem{Key: "secret", Value: true},
+	}
 
 	repoName := "foo_repo"
 	repositories = []repositoryData{
@@ -398,6 +488,7 @@ func TestParseBasicJobConfigOverrides(t *testing.T) {
 		yaml.MapItem{Key: "env-vars", Value: []interface{}{"foo=bar"}},
 		yaml.MapItem{Key: "optional", Value: true},
 		yaml.MapItem{Key: "resources", Value: resources},
+		yaml.MapItem{Key: "volumes", Value: []interface{}{volume}},
 		yaml.MapItem{Key: "reporter_config", Value: reporterConfig},
 	}
 
@@ -456,7 +547,40 @@ func TestParseBasicJobConfigOverrides(t *testing.T) {
 		"    disk: 16Ti",
 	}
 	if diff := cmp.Diff(job.Resources, expectedResources); diff != "" {
-		t.Fatalf("Unexpected volume mount: (-got +want)\n%s", diff)
+		t.Fatalf("Unexpected resources (-got +want)\n%s", diff)
+	}
+	expectedVolumes := []string{
+		"- name: docker-graph",
+		"  emptyDir: {}",
+		"- name: modules",
+		"  hostPath:",
+		"    path: /lib/modules",
+		"    type: Directory",
+		"- name: cgroup",
+		"  hostPath:",
+		"    path: /sys/fs/cgroup",
+		"    type: Directory",
+		"- name: foo",
+		"  secret:",
+		"    secretName: foo",
+	}
+
+	if diff := cmp.Diff(job.Volumes, expectedVolumes); diff != "" {
+		t.Fatalf("Unexpected volume mounts: (-got +want)\n%s", diff)
+	}
+
+	expectedVolumeMounts := []string{
+		"- name: docker-graph",
+		"  mountPath: /docker-graph",
+		"- name: modules",
+		"  mountPath: /lib/modules",
+		"- name: cgroup",
+		"  mountPath: /sys/fs/cgroup",
+		"- name: foo",
+		"  mountPath: /foo/path",
+	}
+	if diff := cmp.Diff(job.VolumeMounts, expectedVolumeMounts); diff != "" {
+		t.Fatalf("Unexpected volume mounts: (-got +want)\n%s", diff)
 	}
 
 	expectedReporterConfig := []string{

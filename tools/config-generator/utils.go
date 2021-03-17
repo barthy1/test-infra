@@ -87,6 +87,16 @@ func getMapSlice(m interface{}) yaml.MapSlice {
 	return nil
 }
 
+// getMapSliceArray casts the given interface (expected MapSlice array) as MapSlice array.
+func getMapSliceArray(m interface{}) []yaml.MapSlice {
+	interfaceArray := getInterfaceArray(m)
+	mapSliceArray := make([]yaml.MapSlice, len(interfaceArray))
+	for i := range interfaceArray {
+		mapSliceArray[i] = getMapSlice(interfaceArray[i])
+	}
+	return mapSliceArray
+}
+
 // appendIfUnique appends an element to an array of strings, unless it's already present.
 func appendIfUnique(a1 []string, e2 string) []string {
 	var res []string

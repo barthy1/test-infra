@@ -861,6 +861,28 @@ periodics:
         memory: 12Gi
       limits:
         memory: 16Gi
+  - custom-job: s390x-e2e-tests
+    cron: 0 8 * * *
+    command:
+    - ./test/e2e-tests.sh
+    args:
+    - --run-tests
+    env-vars:
+    - DISABLE_MD_LINTING="1"
+    - KO_FLAGS="--platform=linux/s390x"
+    - DEPLOY_KNATIVE_MONITORING="0"
+    - SYSTEM_NAMESPACE="knative-eventing"
+    - PLATFORM="linux/s390x"
+    - KO_DOCKER_REPO="s390x-cluster1.default.svc.cluster.local:6000"
+    - KUBECONFIG="/root/.kube/config"
+    - SSL_CERT_FILE="/opt/ssl/certs/registry.crt"
+    volumes:
+    - name: s390x-registry
+      path: /opt/ssl/certs
+      secret: true
+    - name: s390x-kubeconfig
+      path: /root/.kube/
+      secret: true
   knative/eventing-contrib:
   - continuous: true
     resources:

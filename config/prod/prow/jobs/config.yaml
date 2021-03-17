@@ -10122,6 +10122,70 @@ periodics:
     - name: release-account
       secret:
         secretName: release-account
+- cron: "0 8 * * *"
+  name: ci-knative-eventing-s390x-e2e-tests
+  agent: kubernetes
+  decorate: true
+  decoration_config:
+    timeout: 120m
+  cluster: "build-knative"
+  extra_refs:
+  - org: knative
+    repo: eventing
+    path_alias: knative.dev/eventing
+    base_ref: main
+  annotations:
+    testgrid-dashboards: eventing
+    testgrid-tab-name: eventing-s390x-e2e-tests
+    testgrid-alert-stale-results-hours: "3"
+  spec:
+    containers:
+    - image: gcr.io/knative-tests/test-infra/prow-tests:stable
+      imagePullPolicy: Always
+      command:
+      - runner.sh
+      args:
+      - "./test/e2e-tests.sh"
+      - "--run-tests"
+      volumeMounts:
+      - name: s390x-registry
+        mountPath: /opt/ssl/certs
+      - name: s390x-kubeconfig
+        mountPath: /root/.kube/
+      - name: test-account
+        mountPath: /etc/test-account
+        readOnly: true
+      env:
+      - name: DISABLE_MD_LINTING
+        value: "1"
+      - name: KO_FLAGS
+        value: "--platform=linux/s390x"
+      - name: DEPLOY_KNATIVE_MONITORING
+        value: "0"
+      - name: SYSTEM_NAMESPACE
+        value: "knative-eventing"
+      - name: PLATFORM
+        value: "linux/s390x"
+      - name: KO_DOCKER_REPO
+        value: "s390x-cluster1.default.svc.cluster.local:6000"
+      - name: KUBECONFIG
+        value: "/root/.kube/config"
+      - name: SSL_CERT_FILE
+        value: "/opt/ssl/certs/registry.crt"
+      - name: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/test-account/service-account.json
+      - name: E2E_CLUSTER_REGION
+        value: us-central1
+    volumes:
+    - name: s390x-registry
+      secret:
+        secretName: s390x-registry
+    - name: s390x-kubeconfig
+      secret:
+        secretName: s390x-kubeconfig
+    - name: test-account
+      secret:
+        secretName: test-account
 - cron: "0 1 * * *"
   name: ci-knative-eventing-go-coverage
   labels:
